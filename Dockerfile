@@ -1,4 +1,5 @@
-FROM ubuntu:xenial-20210416
+# FROM ubuntu:xenial-20210416
+FROM ubuntu:noble-20240429
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
@@ -41,7 +42,8 @@ RUN git clone https://github.com/llvm/llvm-project.git /tmp/llvm \
  && cd build \
  && cmake \
     -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
-    -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;libcxx;libcxxabi;compiler-rt" \
+    -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;compiler-rt" \
+    -DLLVM_ENABLE_RUNTIMES="libcxx" \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=true \
     -DLLVM_ENABLE_RTTI=true \
