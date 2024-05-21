@@ -43,7 +43,7 @@ RUN git clone https://github.com/llvm/llvm-project.git /tmp/llvm \
  && cmake \
     -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
     -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;compiler-rt" \
-    -DLLVM_ENABLE_RUNTIMES="libcxx" \
+    -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=true \
     -DLLVM_ENABLE_RTTI=true \
