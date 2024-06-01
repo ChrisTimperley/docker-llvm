@@ -3,6 +3,9 @@ DOCKER_ORG=christimperley
 llvm18:
 	docker build --build-arg LLVM_VERSION=18.1.6 -t ${DOCKER_ORG}/$@ .
 
+llvm18-alpine:
+	docker build -f Dockerfile.alpine -t ${DOCKER_ORG}/$@ .
+
 llvm12:
 	docker build --build-arg LLVM_VERSION=12.0.1 -t ${DOCKER_ORG}/$@ .
 
