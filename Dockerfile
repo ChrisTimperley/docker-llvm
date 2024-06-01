@@ -106,12 +106,12 @@ RUN cd /tmp/llvm/build \
  && ninja \
  && ninja install
 
-# NOTE this works
+# NOTE this works ONLY for Linux x86_64; breaks for AAarch64 and ARM due to LD_LIBRARY_PATH
 FROM base as stage_two
 ARG LLVM_DIR
 COPY --from=stage_one /opt/llvm /opt/llvm
 ENV PATH "${LLVM_DIR}/bin:${PATH}"
-ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
 ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
 ENV CPLUS_INCLUDE_PATH "${LLVM_DIR}/include:${CPLUS_INCLUDE_PATH}"
 RUN cd /tmp/llvm/build \
