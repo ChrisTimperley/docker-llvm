@@ -1,11 +1,14 @@
-FROM ubuntu:xenial-20210416
-# FROM ubuntu:noble-20240429
+ARG LLVM_DIR=/opt/llvm
+
+FROM ubuntu:xenial-20210416 AS base
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
+        autoconf \
+        libtool \
         apt-transport-https \
         build-essential \
         ca-certificates \
@@ -23,9 +26,6 @@ RUN apt-get update \
         libssl-dev \
         libxml2-dev \
         libxmlsec1-dev \
-        musl-dev \
-        ninja-build \
-        software-properties-common \
         tk-dev \
         vim \
         wget \
@@ -54,7 +54,12 @@ RUN git clone "${CMAKE_REPO_URL}" /tmp/cmake \
  && make install \
  && rm -rf /tmp/cmake
 
-RUN add-apt-repository ppa:ubuntu-toolchain-r/test \
+ # manually install PPA (ubuntu-toolchain-r/test): http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu
+RUN apt-get update \
+ && apt-get install -y \
+     lsb-release \
+ && echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list \
+ && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 60C317803A41BA51845E371A1E9377A2BA9EF27F \
  && apt-get update \
  && apt-get install -y \
       gcc-8 \
@@ -72,17 +77,21 @@ RUN apt-get remove -y ninja-build \
  && cp ./ninja /usr/local/bin \
  && rm -rf /tmp/ninja
 
-ARG LLVM_DIR=/opt/llvm
+FROM base as stage_zero
 ARG LLVM_VERSION="11.1.0"
 RUN git clone https://github.com/llvm/llvm-project.git /tmp/llvm \
  && cd /tmp/llvm \
  && git checkout "llvmorg-${LLVM_VERSION}" \
- && mkdir build \
- && cd build \
+ && mkdir build
+
+FROM stage_zero as stage_one
+ARG LLVM_DIR
+RUN cd /tmp/llvm/build \
  && cmake \
     -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
-    -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;compiler-rt" \
+    -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
     -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+    -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=true \
     -DLLVM_ENABLE_RTTI=true \
@@ -90,6 +99,51 @@ RUN git clone https://github.com/llvm/llvm-project.git /tmp/llvm \
     -G Ninja \
     ../llvm \
  && ninja \
- && ninja install \
- && rm -rf /tmp/llvm
+ && ninja install
+
+FROM stage_zero as stage_two
+ARG LLVM_DIR
+COPY --from=stage_one /opt/llvm /opt/llvm
 ENV PATH "${LLVM_DIR}/bin:${PATH}"
+ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
+ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
+ENV CPLUS_INCLUDE_PATH "${LLVM_DIR}/include:${CPLUS_INCLUDE_PATH}"
+RUN cd /tmp/llvm/build \
+ && cmake \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_EXE_LINKER_FLAGS="-l:libc++abi.a" \
+    -DCMAKE_SHARED_LINKER_FLAGS="-l:libc++abi.a" \
+    -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
+    -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
+    -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+    -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
+    -DLIBCLANG_BUILD_STATIC=ON \
+    -DLLVM_ENABLE_PIC=ON \
+    -DLLVM_ENABLE_LIBXML2=OFF \
+    -DLLVM_ENABLE_TERMINFO=OFF \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLLVM_ENABLE_ASSERTIONS=true \
+    -DLLVM_ENABLE_RTTI=true \
+    -DLLVM_PARALLEL_LINK_JOBS=1 \
+    -DLLVM_ENABLE_LIBCXX=ON \
+    -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
+    -DLLVM_ENABLE_LLVM_LIBC=ON \
+    -DLLVM_ENABLE_LLD=true \
+    -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON \
+    -DLIBCXXABI_ENABLE_SHARED=OFF \
+    -G Ninja \
+    ../llvm \
+ && ninja \
+ && ninja install
+
+FROM base as package
+ARG LLVM_DIR
+COPY --from=stage_two /opt/llvm /opt/llvm
+ENV PATH "${LLVM_DIR}/bin:${PATH}"
+ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
+ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
+ENV CPLUS_INCLUDE_PATH "${LLVM_DIR}/include:${CPLUS_INCLUDE_PATH}"
+ENV CC clang
+ENV CXX clang++
+ENV LD ld.lld
