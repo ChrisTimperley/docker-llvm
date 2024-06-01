@@ -133,45 +133,38 @@ RUN cd /tmp/llvm/build \
     ../llvm \
  && ninja \
  && ninja install
-#
-# # RUN cd /tmp/llvm/build \
-# #  && cmake \
-# #     -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
-# #     -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
-# #     -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
-# #     -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
-# #     -DCMAKE_BUILD_TYPE=Release \
-# #     -DLLVM_ENABLE_ASSERTIONS=true \
-# #     -DLLVM_ENABLE_RTTI=true \
-# #     -DLLVM_PARALLEL_LINK_JOBS=1 \
-# #     -DLLVM_ENABLE_LIBCXX=ON \
-# #     -DLLVM_ENABLE_LLVM_LIBC=ON \
-# #     -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
-# #     -DLLVM_ENABLE_LLD=true \
-# #     -G Ninja \
-# #     ../llvm \
-# #  && ninja \
-# #  && ninja install
-#
-# # # -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
-# # RUN cd /tmp/llvm/build \
-# #  && cmake \
-# #     -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
-# #     -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
-# #     -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
-# #     -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
-# #     -DCMAKE_BUILD_TYPE=Release \
-# #     -DLLVM_ENABLE_ASSERTIONS=true \
-# #     -DLLVM_ENABLE_RTTI=true \
-# #     -DLLVM_PARALLEL_LINK_JOBS=1 \
-# #     -DLLVM_ENABLE_LIBCXX=ON \
-# #     -DLLVM_ENABLE_LLVM_LIBC=ON \
-# #     -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
-# #     -DLLVM_ENABLE_LLD=true \
-# #     -G Ninja \
-# #     ../llvm \
-# #  && ninja \
-# #  && ninja install
+
+# NOTE this works ONLY for Linux x86_64; breaks for AAarch64 and ARM due to LD_LIBRARY_PATH
+FROM base as stage_three
+ARG LLVM_DIR
+COPY --from=stage_two /opt/llvm /opt/llvm
+ENV PATH "${LLVM_DIR}/bin:${PATH}"
+ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
+ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
+ENV CPLUS_INCLUDE_PATH "${LLVM_DIR}/include:${CPLUS_INCLUDE_PATH}"
+RUN cd /tmp/llvm/build \
+ && cmake \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_EXE_LINKER_FLAGS="-lc++abi" \
+    -DCMAKE_SHARED_LINKER_FLAGS="-lc++abi" \
+    -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
+    -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
+    -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+    -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLLVM_ENABLE_ASSERTIONS=true \
+    -DLLVM_ENABLE_RTTI=true \
+    -DLLVM_PARALLEL_LINK_JOBS=1 \
+    -DLLVM_ENABLE_LIBCXX=ON \
+    -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
+    -DLLVM_ENABLE_LLVM_LIBC=ON \
+    -DLLVM_ENABLE_LLD=true \
+    -G Ninja \
+    ../llvm \
+ && ninja \
+ && ninja install
+
 #
 # #    -DLIBCXX_ENABLE_SHARED=NO \
 # #    -DLIBCXX_ENABLE_STATIC=YES \
