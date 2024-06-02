@@ -134,6 +134,7 @@ RUN cd /tmp/llvm/build \
  && ninja \
  && ninja install
 
+# NOTE should be implicit? -DLIBCXXABI_USE_LLVM_UNWINDER=YES
 # NOTE this works ONLY for Linux x86_64; breaks for AAarch64 and ARM due to LD_LIBRARY_PATH
 FROM base as stage_three
 ARG LLVM_DIR
@@ -146,8 +147,8 @@ RUN cd /tmp/llvm/build \
  && cmake \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_EXE_LINKER_FLAGS="-lc++abi" \
-    -DCMAKE_SHARED_LINKER_FLAGS="-lc++abi" \
+    -DCMAKE_EXE_LINKER_FLAGS="-l:libc++abi.a" \
+    -DCMAKE_SHARED_LINKER_FLAGS="-l:libc++abi.a" \
     -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
     -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
     -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
@@ -160,37 +161,11 @@ RUN cd /tmp/llvm/build \
     -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
     -DLLVM_ENABLE_LLVM_LIBC=ON \
     -DLLVM_ENABLE_LLD=true \
+    -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON \
+    -DLIBCXXABI_ENABLE_SHARED=OFF \
     -G Ninja \
     ../llvm \
  && ninja \
  && ninja install
 
-#
-# #    -DLIBCXX_ENABLE_SHARED=NO \
-# #    -DLIBCXX_ENABLE_STATIC=YES \
-# # RUN cd /tmp/llvm/build \
-# #  && cmake \
-# #     -DCMAKE_BUILD_TYPE=Release \
-# #     -DCMAKE_C_COMPILER=clang \
-# #     -DCMAKE_CXX_COMPILER=clang++ \
-# #     -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
-# #     -DLIBCXXABI_USE_LLVM_UNWINDER=YES \
-# #     -DLIBCXX_CXX_ABI=libcxxabi \
-# #     -DCLANG_ENABLE_BOOTSTRAP=ON \
-# #     -DBUILD_SHARED_LIBS=OFF \
-# #     -DCMAKE_AR=llvm-ar \
-# #     -DCMAKE_EXE_LINKER_FLAGS="-lc++ -lc++abi -lunwind -lm -lpthread" \
-# #     -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
-# #     -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
-# #     -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
-# #     -DLLVM_ENABLE_ASSERTIONS=true \
-# #     -DLLVM_ENABLE_RTTI=true \
-# #     -DLLVM_PARALLEL_LINK_JOBS=1 \
-# #     -DLLVM_ENABLE_LIBCXX=ON \
-# #     -DLLVM_ENABLE_LLVM_LIBC=ON \
-# #     -DLLVM_ENABLE_LLD=true \
-# #     -G Ninja \
-# #     ../llvm \
-# #  && ninja \
-# #  && ninja install
-#
+# TODO build zlib with -fPIC
