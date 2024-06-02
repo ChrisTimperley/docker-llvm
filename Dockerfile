@@ -6,6 +6,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
+# TODO remove: libncursesw5-dev
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         autoconf \
@@ -168,4 +169,68 @@ RUN cd /tmp/llvm/build \
  && ninja \
  && ninja install
 
-# TODO build zlib with -fPIC
+# TODO build with:
+#    -DCMAKE_EXE_LINKER_FLAGS="-l:libc++abi.a -l:librt.a -l:libtinfo.a" \
+#    -DCMAKE_SHARED_LINKER_FLAGS="-l:libc++abi.a -l:librt.a -l:libtinfo.a" \
+FROM base as fpic
+ARG LLVM_DIR
+COPY --from=stage_three /opt/llvm /opt/llvm
+ENV PATH "${LLVM_DIR}/bin:${PATH}"
+ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
+ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
+ENV CPLUS_INCLUDE_PATH "${LLVM_DIR}/include:${CPLUS_INCLUDE_PATH}"
+ENV CC clang
+ENV CXX clang++
+ENV LD ld.lld
+
+ARG NCURSES_REPO_URL="https://github.com/mirror/ncurses"
+ARG NCURSES_VERSION="v6.4"
+RUN git clone "${NCURSES_REPO_URL}" /tmp/ncurses \
+ && cd /tmp/ncurses \
+ && git checkout "${NCURSES_VERSION}" \
+ && apt-get remove -y libncursesw5-dev \
+ && ./configure \
+      CC=gcc \
+      CXX=g++ \
+      LD=ld \
+      CXXFLAGS="-fPIC" \
+      CFLAGS="-fPIC" \
+      --enable-widec \
+      --with-termlib=tinfo \
+      --without-ada \
+      --prefix=/usr \
+      --libdir=/usr/lib/x86_64-linux-gnu \
+ && make -j8 \
+ && make install
+
+# https://stackoverflow.com/questions/6578484/telling-gcc-directly-to-link-a-library-statically
+# https://linux.die.net/man/1/ld
+# -Wl,-Bstatic
+RUN cd /tmp/llvm/build \
+ && cmake \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_EXE_LINKER_FLAGS="-l:libc++abi.a -l:libtinfo.a" \
+    -DCMAKE_SHARED_LINKER_FLAGS="-l:libc++abi.a -l:libtinfo.a" \
+    -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
+    -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
+    -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+    -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLLVM_ENABLE_ASSERTIONS=true \
+    -DLLVM_ENABLE_RTTI=true \
+    -DLLVM_PARALLEL_LINK_JOBS=1 \
+    -DLLVM_ENABLE_LIBCXX=ON \
+    -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
+    -DLLVM_ENABLE_LLVM_LIBC=ON \
+    -DLLVM_ENABLE_LLD=true \
+    -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON \
+    -DLIBCXXABI_ENABLE_SHARED=OFF \
+    -G Ninja \
+    ../llvm \
+ && ninja \
+ && ninja install
+
+# TODO build with:
+#    -DCMAKE_EXE_LINKER_FLAGS="-l:libc++abi.a -l:librt.a -l:libtinfo.a" \
+#    -DCMAKE_SHARED_LINKER_FLAGS="-l:libc++abi.a -l:librt.a -l:libtinfo.a" \
