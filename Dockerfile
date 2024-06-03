@@ -1,12 +1,10 @@
 ARG LLVM_DIR=/opt/llvm
 
 FROM ubuntu:xenial-20210416 AS base
-# FROM ubuntu:noble-20240429
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
-# TODO remove: libncursesw5-dev
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         autoconf \
@@ -79,6 +77,7 @@ RUN apt-get remove -y ninja-build \
  && cp ./ninja /usr/local/bin \
  && rm -rf /tmp/ninja
 
+FROM base as stage_zero
 ARG LLVM_VERSION="11.1.0"
 RUN git clone https://github.com/llvm/llvm-project.git /tmp/llvm \
  && cd /tmp/llvm \
@@ -90,7 +89,7 @@ RUN git clone https://github.com/llvm/llvm-project.git /tmp/llvm \
 # LLVM_ENABLE_LIBCXX=ON \
 # LLVM_STATIC_LINK_CXX_STDLIB=ON \
 # LLVM_ENABLE_LLD=true \
-FROM base as stage_one
+FROM stage_zero as stage_one
 ARG LLVM_DIR
 RUN cd /tmp/llvm/build \
  && cmake \
@@ -108,7 +107,7 @@ RUN cd /tmp/llvm/build \
  && ninja install
 
 # NOTE this works ONLY for Linux x86_64; breaks for AAarch64 and ARM due to LD_LIBRARY_PATH
-FROM base as stage_two
+FROM stage_zero as stage_two
 ARG LLVM_DIR
 COPY --from=stage_one /opt/llvm /opt/llvm
 ENV PATH "${LLVM_DIR}/bin:${PATH}"
@@ -137,7 +136,7 @@ RUN cd /tmp/llvm/build \
 
 # NOTE should be implicit? -DLIBCXXABI_USE_LLVM_UNWINDER=YES
 # NOTE this works ONLY for Linux x86_64; breaks for AAarch64 and ARM due to LD_LIBRARY_PATH
-FROM base as stage_three
+FROM stage_zero as stage_three
 ARG LLVM_DIR
 COPY --from=stage_two /opt/llvm /opt/llvm
 ENV PATH "${LLVM_DIR}/bin:${PATH}"
@@ -169,10 +168,7 @@ RUN cd /tmp/llvm/build \
  && ninja \
  && ninja install
 
-# TODO build with:
-#    -DCMAKE_EXE_LINKER_FLAGS="-l:libc++abi.a -l:librt.a -l:libtinfo.a" \
-#    -DCMAKE_SHARED_LINKER_FLAGS="-l:libc++abi.a -l:librt.a -l:libtinfo.a" \
-FROM base as fpic
+FROM stage_zero as stage_four
 ARG LLVM_DIR
 COPY --from=stage_three /opt/llvm /opt/llvm
 ENV PATH "${LLVM_DIR}/bin:${PATH}"
@@ -182,26 +178,6 @@ ENV CPLUS_INCLUDE_PATH "${LLVM_DIR}/include:${CPLUS_INCLUDE_PATH}"
 ENV CC clang
 ENV CXX clang++
 ENV LD ld.lld
-
-ARG NCURSES_REPO_URL="https://github.com/mirror/ncurses"
-ARG NCURSES_VERSION="v6.4"
-RUN git clone "${NCURSES_REPO_URL}" /tmp/ncurses \
- && cd /tmp/ncurses \
- && git checkout "${NCURSES_VERSION}" \
- && apt-get remove -y libncursesw5-dev \
- && ./configure \
-      CC=gcc \
-      CXX=g++ \
-      LD=ld \
-      CXXFLAGS="-fPIC" \
-      CFLAGS="-fPIC" \
-      --enable-widec \
-      --with-termlib=tinfo \
-      --without-ada \
-      --prefix=/usr \
-      --libdir=/usr/lib/x86_64-linux-gnu \
- && make -j8 \
- && make install
 
 # https://stackoverflow.com/questions/6578484/telling-gcc-directly-to-link-a-library-statically
 # https://linux.die.net/man/1/ld
@@ -238,6 +214,13 @@ RUN cd /tmp/llvm/build \
  && ninja \
  && ninja install
 
-# TODO build with:
-#    -DCMAKE_EXE_LINKER_FLAGS="-l:libc++abi.a -l:librt.a -l:libtinfo.a" \
-#    -DCMAKE_SHARED_LINKER_FLAGS="-l:libc++abi.a -l:librt.a -l:libtinfo.a" \
+FROM base as package
+ARG LLVM_DIR
+COPY --from=stage_four /opt/llvm /opt/llvm
+ENV PATH "${LLVM_DIR}/bin:${PATH}"
+ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
+ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
+ENV CPLUS_INCLUDE_PATH "${LLVM_DIR}/include:${CPLUS_INCLUDE_PATH}"
+ENV CC clang
+ENV CXX clang++
+ENV LD ld.lld
