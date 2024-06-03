@@ -153,6 +153,10 @@ RUN cd /tmp/llvm/build \
     -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
     -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
     -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
+    -DLIBCLANG_BUILD_STATIC=ON \
+    -DLLVM_ENABLE_PIC=ON \
+    -DLLVM_ENABLE_LIBXML2=OFF \
+    -DLLVM_ENABLE_TERMINFO=OFF \
     -DCMAKE_BUILD_TYPE=Release \
     -DLLVM_ENABLE_ASSERTIONS=true \
     -DLLVM_ENABLE_RTTI=true \
@@ -179,44 +183,9 @@ ENV CC clang
 ENV CXX clang++
 ENV LD ld.lld
 
-# https://stackoverflow.com/questions/6578484/telling-gcc-directly-to-link-a-library-statically
-# https://linux.die.net/man/1/ld
-# -Wl,-Bstatic
-#    -DLLVM_USE_STATIC_ZSTD=ON \
-# -DENABLE_STATIC=ON \
-# -DENABLE_SHARED=OFF \
-RUN cd /tmp/llvm/build \
- && cmake \
-    -DCMAKE_C_COMPILER=clang \
-    -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_EXE_LINKER_FLAGS="-l:libc++abi.a" \
-    -DCMAKE_SHARED_LINKER_FLAGS="-l:libc++abi.a" \
-    -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
-    -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
-    -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
-    -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
-    -DLIBCLANG_BUILD_STATIC=ON \
-    -DLLVM_ENABLE_PIC=ON \
-    -DLLVM_ENABLE_LIBXML2=OFF \
-    -DLLVM_ENABLE_TERMINFO=OFF \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DLLVM_ENABLE_ASSERTIONS=true \
-    -DLLVM_ENABLE_RTTI=true \
-    -DLLVM_PARALLEL_LINK_JOBS=1 \
-    -DLLVM_ENABLE_LIBCXX=ON \
-    -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
-    -DLLVM_ENABLE_LLVM_LIBC=ON \
-    -DLLVM_ENABLE_LLD=true \
-    -DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON \
-    -DLIBCXXABI_ENABLE_SHARED=OFF \
-    -G Ninja \
-    ../llvm \
- && ninja \
- && ninja install
-
 FROM base as package
 ARG LLVM_DIR
-COPY --from=stage_four /opt/llvm /opt/llvm
+COPY --from=stage_three /opt/llvm /opt/llvm
 ENV PATH "${LLVM_DIR}/bin:${PATH}"
 ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
 ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
