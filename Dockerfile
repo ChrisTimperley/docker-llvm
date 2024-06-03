@@ -84,11 +84,6 @@ RUN git clone https://github.com/llvm/llvm-project.git /tmp/llvm \
  && git checkout "llvmorg-${LLVM_VERSION}" \
  && mkdir build
 
-# STAGE ONE
-#
-# LLVM_ENABLE_LIBCXX=ON \
-# LLVM_STATIC_LINK_CXX_STDLIB=ON \
-# LLVM_ENABLE_LLD=true \
 FROM stage_zero as stage_one
 ARG LLVM_DIR
 RUN cd /tmp/llvm/build \
@@ -106,39 +101,9 @@ RUN cd /tmp/llvm/build \
  && ninja \
  && ninja install
 
-# NOTE this works ONLY for Linux x86_64; breaks for AAarch64 and ARM due to LD_LIBRARY_PATH
 FROM stage_zero as stage_two
 ARG LLVM_DIR
 COPY --from=stage_one /opt/llvm /opt/llvm
-ENV PATH "${LLVM_DIR}/bin:${PATH}"
-ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
-ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
-ENV CPLUS_INCLUDE_PATH "${LLVM_DIR}/include:${CPLUS_INCLUDE_PATH}"
-RUN cd /tmp/llvm/build \
- && cmake \
-    -DCMAKE_C_COMPILER=clang \
-    -DCMAKE_CXX_COMPILER=clang++ \
-    -DCMAKE_INSTALL_PREFIX="${LLVM_DIR}" \
-    -DLLVM_ENABLE_PROJECTS="lldb;lld;clang;clang-tools-extra;compiler-rt" \
-    -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
-    -DLLVM_TARGETS_TO_BUILD="X86;AArch64;ARM" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DLLVM_ENABLE_ASSERTIONS=true \
-    -DLLVM_ENABLE_RTTI=true \
-    -DLLVM_PARALLEL_LINK_JOBS=1 \
-    -DLLVM_ENABLE_LIBCXX=ON \
-    -DLLVM_ENABLE_LLVM_LIBC=ON \
-    -DLLVM_ENABLE_LLD=true \
-    -G Ninja \
-    ../llvm \
- && ninja \
- && ninja install
-
-# NOTE should be implicit? -DLIBCXXABI_USE_LLVM_UNWINDER=YES
-# NOTE this works ONLY for Linux x86_64; breaks for AAarch64 and ARM due to LD_LIBRARY_PATH
-FROM stage_zero as stage_three
-ARG LLVM_DIR
-COPY --from=stage_two /opt/llvm /opt/llvm
 ENV PATH "${LLVM_DIR}/bin:${PATH}"
 ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
 ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
@@ -172,20 +137,9 @@ RUN cd /tmp/llvm/build \
  && ninja \
  && ninja install
 
-FROM stage_zero as stage_four
-ARG LLVM_DIR
-COPY --from=stage_three /opt/llvm /opt/llvm
-ENV PATH "${LLVM_DIR}/bin:${PATH}"
-ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
-ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
-ENV CPLUS_INCLUDE_PATH "${LLVM_DIR}/include:${CPLUS_INCLUDE_PATH}"
-ENV CC clang
-ENV CXX clang++
-ENV LD ld.lld
-
 FROM base as package
 ARG LLVM_DIR
-COPY --from=stage_three /opt/llvm /opt/llvm
+COPY --from=stage_two /opt/llvm /opt/llvm
 ENV PATH "${LLVM_DIR}/bin:${PATH}"
 ENV LD_LIBRARY_PATH "${LLVM_DIR}/lib/x86_64-unknown-linux-gnu:${LLVM_DIR}/lib:${LD_LIBRARY_PATH}"
 ENV C_INCLUDE_PATH "${LLVM_DIR}/include:${C_INCLUDE_PATH}"
